@@ -1,2 +1,2 @@
-# Saavn-Music-Data-Analysis-using-Apache-Hadoop-Eco-System-Tool-Hive
-Big Data Stack at Saavn  Saavn is a popular online music streaming service that boasts more than 20 million monthly active users. Its database contains the data of users, reviews, audio clips, videos, etc.
+Data-Injection-and-Processing-of-Call-Detail-Record-using-Apache-Hive
+Telecom companies record their users’ activity data, i.e. calls, SMS and internet usage for billing and monitoring purposes. This data is commonly called Call Detail Record (CDR) data, though apart from calls, it also contains data of text messages, internet usage etc.     Since a typical telecom company has millions of users, they generate massive quantities of data. In this I analyse the ‘Milano Grid’ telecom data which contains the telecommunication activity recorded over the city of Milano in Italy. The data is collected by the Telecom Italia cellular network over the city of Milano.
