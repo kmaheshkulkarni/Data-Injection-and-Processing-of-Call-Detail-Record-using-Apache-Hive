@@ -1,0 +1,199 @@
+-- create a new database 
+
+create database IF not exists cdrdatabase;
+use cdrdatabase;
+
+-- create external table containing the entire dataset
+
+drop table cdr;
+
+create external table IF NOT EXISTS cdr ( 
+sqrid int, 
+time_interval bigint, 
+country_code int, 
+sms_in float, 
+sms_out float, 
+call_in float, 
+call_out float, 
+internet_traffic float) 
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+LOCATION 's3://cdrfinalassignment/'
+TBLPROPERTIES('serialization.null.format'='');
+
+-- ################################################################################################
+
+-- create a table containing data coressponding to the 3 countries only - create a filtered table
+
+drop table cdr_countries;
+
+create table IF NOT EXISTS cdr_countries ( 
+sqrid int, 
+time_interval bigint, 
+country_code int, 
+sms_in float, 
+sms_out float, 
+call_in float, 
+call_out float, 
+internet_traffic float);
+ 
+INSERT OVERWRITE TABLE cdr_countries  
+SELECT sqrid, 
+time_interval, 
+country_code,
+sms_in, 
+sms_out, 
+call_in, 
+call_out, 
+internet_traffic FROM cdr where country_code in (39,43,33);
+
+-- #######################################################################
+
+-- Question 1 How many grids (square_ids) are there in total in the given three countries? 
+-- Display the number of unique grids in the three countries. 
+-- (This question has not been graded)
+
+-- All the square ids in the dataset belong to the country code 39 (Milano). 
+select count(DISTINCT sqrid) FROM cdr;
+
+-- #######################################################################
+
+-- Question 2 Which country has the minimum total internet activity? Display the country code of this country.
+
+select `country_code` , sum(`internet_traffic`) as traffic FROM cdr_countries 
+group by `country_code` order by traffic asc; 
+
+-- #######################################################################
+
+-- Question 3 Which country among the given three has the second highest total activity? 
+-- Note that total activity is defined as the sum of sms_in, sms_out, call_in, call_out, internet_traffic. 
+-- Display the country code of this country. Do not compress the table.
+
+select `country_code`, 
+sum(coalesce(`sms_out`,CAST(0 as float))) + 
+sum(coalesce(`sms_in`,CAST(0 as float))) + 
+sum(coalesce(`call_out`,CAST(0 as float))) + 
+sum(coalesce(`call_in`,CAST(0 as float))) + 
+sum(coalesce(`internet_traffic`,CAST(0 as float))) as all_activity 
+from cdr_countries 
+group by `country_code` order by all_activity desc;
+
+
+-- ###########################################################################################
+
+-- Question 4 Which squareID has the maximum total SMS activity in these three countries? 
+-- Note that total SMS activity is the sum of incoming and outgoing SMSes.
+
+select `sqrid`, sum(coalesce(`sms_out`,CAST(0 as float))) + 
+sum(coalesce(`sms_in`,CAST(0 as float))) as sms_total from cdr_countries group by `sqrid` order by sms_total desc
+limit 1;
+
+
+-- #################################################################################
+
+-- Question 5 What is the total activity for the three countries? 
+-- Note that total activity is defined as the sum of sms_in, sms_out, call_in, call_out, internet_traffic. 
+-- For this task, first compress the table that was created in the beginning of task 2. 
+-- Submit the result upto three decimal places, without rounding off the digits, obtained after compressing the table. 
+
+-- create ORC table 
+drop table cdr_orc;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS cdr_orc(
+sqrid int, 
+time_interval bigint, 
+country_code int, 
+sms_in float, 
+sms_out float, 
+call_in float, 
+call_out float, 
+internet_traffic float
+) STORED AS ORC 
+tblproperties ("orc.compress"="ZLIB");
+
+INSERT OVERWRITE TABLE cdr_orc SELECT * FROM cdr_countries;
+
+
+-- Query on ORC table 
+select 
+sum(coalesce(`sms_out`,CAST(0 as float))) + 
+sum(coalesce(`sms_in`,CAST(0 as float))) + 
+sum(coalesce(`call_out`,CAST(0 as float))) + 
+sum(coalesce(`call_in`,CAST(0 as float))) + 
+sum(coalesce(`internet_traffic`,CAST(0 as float))) 
+from cdr_orc ;
+
+
+-- ########################################################################
+
+-- Task 3
+-- create partition table
+
+drop table cdrpart;
+
+create external table IF NOT EXISTS cdrpart ( 
+sqrid int, 
+time_interval bigint, 
+sms_in float, 
+sms_out float, 
+call_in float, 
+call_out float, 
+internet_traffic float)
+PARTITIONED BY (country_code int);
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict;
+
+
+INSERT OVERWRITE TABLE cdrpart PARTITION (country_code) 
+SELECT sqrid, 
+time_interval, 
+sms_in, 
+sms_out, 
+call_in, 
+call_out, 
+internet_traffic, 
+country_code FROM cdr_countries;
+
+-----------------------------------------------------
+
+-- Question 1 What is the total call activity from the three square_ids to country_code 39? 
+-- Submit the result up to three decimal places, without rounding off the digits. 
+-- Both the queries have been considered correct.
+
+-- Query version 1
+select sum(coalesce(`call_out`,CAST(0 as float))) from cdrpart where country_code = 39 and
+sqrid in (101, 102, 103);
+
+-- Query version 2
+select sum(coalesce(`call_out`,CAST(0 as float))) + sum(coalesce(`call_in`,CAST(0 as float))) 
+from cdrpart where country_code = 39 and sqrid in (101, 102, 103);
+
+-- ########################################################
+
+-- Question 2 What is the total SMS activity from the three square_ids to country_code 39? 
+-- Submit the result up to three decimal places, without rounding off the digits.
+-- Both the queries have been considered correct.
+
+-- Query version 1
+select sum(coalesce(`sms_out`,CAST(0 as float))) from cdrpart where country_code = 39 and sqrid in (101, 102, 103);
+
+-- Query version 2
+select sum(coalesce(`sms_out`,CAST(0 as float))) + sum(coalesce(`sms_in`,CAST(0 as float))) from cdrpart
+where country_code = 39 and sqrid in (101, 102, 103);
+
+-- ###########################################################
+
+-- Question 3 What is the total activity, i.e. sum of CallIn, CallOut, SMSIn, SMSOut, internet traffic of the three square_ids? 
+-- Submit the result upto three decimal places, without rounding off the digits. 
+-- You may either compress the partitioned table or not.
+
+select 
+sum(coalesce(`sms_out`,CAST(0 as float))) + 
+sum(coalesce(`sms_in`,CAST(0 as float))) + 
+sum(coalesce(`call_out`,CAST(0 as float))) + 
+sum(coalesce(`call_in`,CAST(0 as float))) + 
+sum(coalesce(`internet_traffic`,CAST(0 as float))) 
+as all_activity from cdrpart 
+where country_code = 39 and sqrid in (101, 102, 103);
+
+
